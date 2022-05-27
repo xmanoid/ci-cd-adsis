@@ -1,0 +1,54 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Login to Dockerhub
+        uses: Docker/login-action@v1
+        with:
+          username: ${{secrets.DOCKERHUB_USERNAME}}
+          password: ${{secrets.DOCKERHUB_PASSWORD}}
+
+      - name: Build and Push to Docker
+        uses: Docker/build-push-action@v2
+        with:
+          push: true
+          tags: catherinevania/helloworld:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+
+    needs: build
+
+    steps:
+      ##SSH itu buat menghubungkan device yang bersifat private
+      - name: Connect to EC2 with SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{secrets.HOST}}
+          key: ${{secrets.AWS_PRIVATEKEY}}
+          username: ubuntu
+          port: 22
+          ##1. pas udah masuk ke VM, harus memberhentikan container yang lagi berjalan (kalo ada, kalo gaada cumaan ngasih
+          ##   warning, ga error)
+          ##2. ngeremove container, karena mau ngestart container baru dengan nama yang sama (gaboleh ada 2 container
+          ##   yang namanya sama)
+          ##3. ngepull image
+          ##4. ngebuat container baru dengan nama helloworld dan port 80 (HTTP, jadi bisa diakses di browser),terus
+          ##   ngepublish image yang udah di buat ke containernya
+          ##5. containernya dijalankan
+          script: |
+            sudo docker container stop helloworld 
+            sudo docker rm helloworld
+            sudo docker pull catherinevania/helloworld:latest
+            sudo docker container create --name helloworld --publish 80:80 catherinevania/helloworld:latest
+            sudo docker container start helloworld
